@@ -7,8 +7,8 @@ import numpy as np
 from torch.distributions.normal import Normal
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 import math
-from UniMedCLIP.src.open_clip import create_model_and_transforms, get_mean_std
-from UniMedCLIP.src.open_clip import HFTokenizer
+from compare_method.CIMVTP.UniMedCLIP.src.open_clip import create_model_and_transforms, get_mean_std
+from compare_method.CIMVTP.UniMedCLIP.src.open_clip import HFTokenizer
 from torchvision import transforms
 import torch
 import torch.nn as nn
@@ -171,11 +171,11 @@ class ConvBlock(nn.Module):
         return x
     
 class Text_Prompt(nn.Module):
-    def __init__(self, exclude_task):
+    def __init__(self, train_task_names):
         super(Text_Prompt,self).__init__()
 
         model_name = 'ViT-B-16-quickgelu' 
-        pretrained_weights = "./unimed_clip_vit_b16.pt" 
+        pretrained_weights = "./UniMedCLIP/unimed_clip_vit_b16.pt" 
         text_encoder_name = "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract" 
         mean, std = get_mean_std()
         device='cuda'
@@ -196,7 +196,7 @@ class Text_Prompt(nn.Module):
             context_length=256,
             **{},)
         
-        self.task_text_prompts = {
+        self.all_task_text_prompts = {
             'Brain': ['this is a MRI photo of a brain.'],
             'Hip': ['this is a CT photo of a hip.'],
             'Cardiac': ['this is a MRI photo of a cardiac.'],
@@ -208,7 +208,7 @@ class Text_Prompt(nn.Module):
        
         self.organ_text_features = {}
         
-        for organ_name, organ_prompts in self.task_text_prompts.items():
+        for organ_name, organ_prompts in self.all_task_text_prompts.items():
             organ_text_inputs = torch.cat([self.tokenizer(prompt) for prompt in organ_prompts])
             with torch.no_grad():
                 organ_text_features = self.clip.encode_text(organ_text_inputs.to(device)).float().detach().requires_grad_(False)
@@ -216,8 +216,8 @@ class Text_Prompt(nn.Module):
 
         self.mapped_clip_prompt_names = []
         self.mapped_clip_prompts = []
-        for task_name in self.organ_text_features.keys():
-            if task_name != exclude_task:
+        for task_name in train_task_names:
+            if task_name in self.organ_text_features:
                 clip_prompt = self.organ_text_features[task_name]  
                 self.mapped_clip_prompts.append(clip_prompt)
                 self.mapped_clip_prompt_names.append(task_name)
@@ -228,7 +228,7 @@ class Text_Prompt(nn.Module):
 
 class VTP(nn.Module):
     def __init__(self, 
-                task_classes = 5, 
+                task_classes = 4, 
                 prompt_size = 64, 
                 prompt_dim = 96,
                 out_dim = 96,
@@ -248,7 +248,7 @@ class VTP(nn.Module):
         
         self.clip_linear = nn.Linear(512, prompt_dim)
 
-        self.visual_proj = ConvBlock(prompt_dim*2, prompt_dim, dropout_rate=dropout_rate)
+        self.visual_proj = ConvBlock(prompt_dim*2, prompt_dim)
         self.text_proj = nn.Sequential(
             nn.Linear(prompt_dim*2, prompt_dim),
             nn.ReLU(inplace=True),
@@ -265,13 +265,13 @@ class VTP(nn.Module):
         
   
         
-        self.text_fuse = ConvBlock(prompt_dim*2, prompt_dim, dropout_rate=dropout_rate)
-        self.visual_fuse = ConvBlock(prompt_dim*2, prompt_dim, dropout_rate=dropout_rate)
-        self.final_fuse = ConvBlock(prompt_dim*2, prompt_dim, dropout_rate=dropout_rate)
+        self.text_fuse = ConvBlock(prompt_dim*2, prompt_dim)
+        self.visual_fuse = ConvBlock(prompt_dim*2, prompt_dim)
+        self.final_fuse = ConvBlock(prompt_dim*2, prompt_dim)
 
-        self.fuse=ConvBlock(prompt_dim*2, prompt_dim, dropout_rate=dropout_rate)
+        self.fuse=ConvBlock(prompt_dim*2, prompt_dim)
 
-        self.all_task_names=['Brain','Hip','Cardiac','Abdominal','Hippocampus','Knee']
+    
 
     
 
