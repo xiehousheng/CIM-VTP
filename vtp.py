@@ -199,10 +199,10 @@ class Text_Prompt(nn.Module):
         self.task_text_prompts = {
             'Brain': ['this is a MRI photo of a brain.'],
             'Hip': ['this is a CT photo of a hip.'],
-            'Heart': ['this is a MRI photo of a cardiac.'],
-            'ABDO': ['this is a CT photo of an abdominal.'],
-            'Haima': ['this is a MRI photo of a hippocampus.'],
-            'OAI': ['this is a MRI photo of a knee.']
+            'Cardiac': ['this is a MRI photo of a cardiac.'],
+            'Abdominal': ['this is a CT photo of an abdominal.'],
+            'Hippocampus': ['this is a MRI photo of a hippocampus.'],
+            'Knee': ['this is a MRI photo of a knee.']
         }
 
        
@@ -271,7 +271,7 @@ class VTP(nn.Module):
 
         self.fuse=ConvBlock(prompt_dim*2, prompt_dim, dropout_rate=dropout_rate)
 
-        self.all_task_names=['Brain','Hip','Heart','ABDO','Haima','OAI']
+        self.all_task_names=['Brain','Hip','Cardiac','Abdominal','Hippocampus','Knee']
 
     
 
