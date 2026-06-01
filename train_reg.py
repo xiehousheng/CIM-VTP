@@ -273,8 +273,8 @@ def set_seed(seed=42):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Training script for multi-task registration')
-    parser.add_argument('--exclude-tasks', nargs='+', default=[''],
-                      help='Tasks to exclude from training, e.g., --exclude-tasks Cardiac Brain')
+    parser.add_argument('--train-tasks', nargs='+', default=['Abdominal', 'Brain', 'Knee', 'Hippocampus', 'Cardiac', 'Hip'],
+                      help='Tasks to include in training')
     parser.add_argument('--gpu', type=str, default='0',
                       help='GPU device ID to use')
     parser.add_argument('--batch-size', type=int, default=1,
@@ -315,7 +315,7 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
 
     logger = setup_logger(log_dir)
-    logger.info(f"Excluding tasks: {args.exclude_tasks}")
+    logger.info(f"Training tasks: {args.train_tasks}")
     if args.pretrained_path:
         logger.info(f"Loading pretrained weights from: {args.pretrained_path}")
 
@@ -323,11 +323,11 @@ def main():
         data_root=data_root,
         target_size=target_size,
         split='train',
-        exclude_tasks=args.exclude_tasks
+        train_tasks=args.train_tasks
     )
     train_loader = train_dataset.get_dataloader(batch_size=batch_size)
 
-    model = CIMVTP(exclude_name='')
+    model = CIMVTP(train_task_names=args.train_tasks)
     model.to(device)
 
     if args.pretrained_path:
