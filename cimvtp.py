@@ -7,7 +7,7 @@ import math
 import os
 import matplotlib.pyplot as plt
 from torch.distributions.normal import Normal
-from vtp import VTP, Text_Prompt
+from compare_method.CIMVTP.vtp import VTP, Text_Prompt
 
 class RegHead(nn.Module):
     def __init__(self, in_channels, out_channels=3, kernel_size=3, stride=1, padding=1):
@@ -96,7 +96,7 @@ class DualRegionConvBlock(nn.Module):
         else:
             x = self.conv1(x)
             
-        x = self.norm1(x, mask)
+        x = self.norm1(x)
         x = self.act1(x)
         
         if mask is not None:
@@ -108,7 +108,7 @@ class DualRegionConvBlock(nn.Module):
         else:
             x = self.conv2(x)
 
-        x = self.norm2(x, mask)
+        x = self.norm2(x)
         x_out = self.act2(x)
         return x_out
 
@@ -136,7 +136,7 @@ class EncoderBlock(nn.Module):
         else:
             x = self.conv1(x)
             
-        x = self.norm1(x, mask)
+        x = self.norm1(x)
         x = self.act1(x)
         if mask is not None:
             inside_region = x * mask
@@ -147,7 +147,7 @@ class EncoderBlock(nn.Module):
         else:
             x = self.conv2(x)
             
-        x = self.norm2(x, mask)
+        x = self.norm2(x)
         x = self.act2(x)
         
         return x
@@ -320,7 +320,7 @@ class DomainClassifier(nn.Module):
     def __init__(
         self,
         channel_num=16,
-        num_classes=5,
+        num_classes=4,
     ):
         super().__init__()
         
@@ -396,7 +396,7 @@ class DomainClassifier(nn.Module):
         return out
 
 class CIMVTP(nn.Module):
-    def __init__(self, channel_num=16,exclude_name=''):
+    def __init__(self, channel_num=16, train_task_names=None):
         super().__init__()
 
         self.encoder = Encoder(channel_num=16)
@@ -428,11 +428,12 @@ class CIMVTP(nn.Module):
         self.reghead_4 = RegHead(channel_num * 16)
         self.reghead_5 = RegHead(channel_num * 32)
         
-        if exclude_name=='':
-            class_num=6
-        else:
-            class_num=5
-        self.tp=Text_Prompt(exclude_name)
+        if train_task_names is None:
+            train_task_names = ['Hip', 'Cardiac', 'Abdominal', 'Knee']
+
+        class_num = len(train_task_names)
+        self.train_task_names = train_task_names
+        self.tp=Text_Prompt(train_task_names)
         
         
 
@@ -445,14 +446,8 @@ class CIMVTP(nn.Module):
         self.ResizeTransformer = ResizeTransformer_block(resize_factor=2, mode='trilinear')
         self.SpatialTransformer = SpatialTransformer_block(mode='bilinear')
 
-        self.exclude_name=exclude_name
-        if exclude_name=='':
-            self.classifier=DomainClassifier(num_classes=6)
-        else:
-            self.classifier=DomainClassifier()
-
-        all_task_names=['Brain','Hip','Cardiac','Abdominal','Hippocampus','Knee']
-        self.task_names = [task for task in all_task_names if task != self.exclude_name]
+        self.classifier=DomainClassifier(num_classes=class_num)
+        self.cls_criterion = nn.CrossEntropyLoss()
    
 
  
@@ -464,7 +459,7 @@ class CIMVTP(nn.Module):
         weights = self.classifier([x_mov_1, x_mov_2, x_mov_3, x_mov_4, x_mov_5], [x_fix_1, x_fix_2, x_fix_3, x_fix_4, x_fix_5])
       
         if is_train:
-            task_id = torch.tensor([self.task_names.index(task_name)], device=weights.device)
+            task_id = torch.tensor([self.train_task_names.index(task_name)], device=weights.device)
             cls_loss = self.cls_criterion(weights, task_id)
         else:
             cls_loss = torch.tensor(0.0, device=weights.device)
@@ -476,9 +471,9 @@ class CIMVTP(nn.Module):
         cat = torch.cat([x_mov_5, corr_5, x_fix_5], dim=1)
         conv_corr_5 = self.conv_5(cat,None)
         d_5=conv_corr_5
-        prompt_5,stloss5=self.vtp_5(conv_corr_5,organ_prompt,weights)
+        prompt_5=self.vtp_5(conv_corr_5,organ_prompt,weights)
         flow_5 = self.reghead_5(torch.cat([conv_corr_5,prompt_5],dim=1))
-        flow_5 = self.vecint(flow_5) 
+
        
    
         d_5=self.upsample_4(d_5)
@@ -488,7 +483,7 @@ class CIMVTP(nn.Module):
         cat = torch.cat([x_mov_4, corr_4, d_5, x_fix_4], dim=1)
         conv_corr_4 = self.conv_4(cat,None)
         d_4=conv_corr_4
-        prompt_4,stloss4=self.vtp_4(conv_corr_4,organ_prompt,weights)
+        prompt_4=self.vtp_4(conv_corr_4,organ_prompt,weights)
         flow_4 = self.reghead_4(torch.cat([conv_corr_4,prompt_4],dim=1))
         flow_4 = self.SpatialTransformer(flow_5_up, flow_4) + flow_4
     
@@ -500,7 +495,7 @@ class CIMVTP(nn.Module):
         cat = torch.cat([x_mov_3, corr_3, d_4, x_fix_3], dim=1)
         conv_corr_3 = self.conv_3(cat,None)
         d_3=conv_corr_3
-        prompt_3,stloss3=self.vtp_3(conv_corr_3,organ_prompt,weights)
+        prompt_3=self.vtp_3(conv_corr_3,organ_prompt,weights)
         flow_3 = self.reghead_3(torch.cat([conv_corr_3,prompt_3],dim=1))
         flow_3 = self.SpatialTransformer(flow_4_up, flow_3) + flow_3
    
@@ -513,7 +508,7 @@ class CIMVTP(nn.Module):
         cat = torch.cat([x_mov_2, corr_2, d_3, x_fix_2], dim=1)
         conv_corr_2 = self.conv_2(cat,None)
         d_2=conv_corr_2
-        prompt_2,stloss2=self.vtp_2(conv_corr_2,organ_prompt,weights)
+        prompt_2=self.vtp_2(conv_corr_2,organ_prompt,weights)
         flow_2 = self.reghead_2(torch.cat([conv_corr_2,prompt_2],dim=1))
         flow_2 = self.SpatialTransformer(flow_3_up, flow_2) + flow_2
        
@@ -531,4 +526,4 @@ class CIMVTP(nn.Module):
 
       
      
-        return moved, flow_1, weights
+        return moved, flow_1, cls_loss
