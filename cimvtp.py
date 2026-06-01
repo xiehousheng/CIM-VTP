@@ -451,7 +451,7 @@ class CIMVTP(nn.Module):
         else:
             self.classifier=DomainClassifier()
 
-        all_task_names=['Brain','Hip','Heart','ABDO','Haima','OAI']
+        all_task_names=['Brain','Hip','Cardiac','Abdominal','Hippocampus','Knee']
         self.task_names = [task for task in all_task_names if task != self.exclude_name]
    
 
