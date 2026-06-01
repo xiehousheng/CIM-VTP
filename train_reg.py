@@ -287,7 +287,7 @@ def parse_args():
                       help='Initial learning rate')
     parser.add_argument('--seed', type=int, default=42,
                       help='Random seed for reproducibility')
-    parser.add_argument('--data-root', type=str, default='/data2/data/xr_project/XHS_MAE/MICCAI/dataset',
+    parser.add_argument('--data-root', type=str, default='./dataset',
                       help='Root directory of the dataset')
     parser.add_argument('--save-dir', type=str, default='./checkpoints',
                       help='Directory to save model checkpoints')
